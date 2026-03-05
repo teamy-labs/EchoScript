@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoScript</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            background: black;
+            font-family: 'Cinzel', serif;
+            height: 100vh;
+            overflow-x: hidden;
+            overflow-y: scroll;
+        }
+
+        body::-webkit-scrollbar { display: none; }
+        body { scrollbar-width: none; }
+
+        spline-viewer {
+            width: 100vw;
+            height: 105vh;
+        }
+
+        #titleOverlay {
+            position: fixed;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            font-weight: 800;
+            background: linear-gradient(to bottom, #ffffff, #cfc4ff 30%, #7d58df 60%, #3f1f6d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 14px rgba(150,110,255,0.25));
+            z-index: 20;
+            pointer-events: none;
+            transition: opacity .6s ease-out;
+        }
+
+        #clickText {
+            position: fixed;
+            top: 61%;
+            left: 50.5%;
+            transform: translate(-50%, -50%);
+            font-size: 0.9rem;
+            color: rgba(230,230,255,0.85);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .5s ease-out;
+            z-index: 30;
+        }
+
+        #clickArea {
+            position: fixed;
+            top: 52%;
+            left: 50%;
+            width: 140px;
+            height: 140px;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            pointer-events: none;
+            cursor: pointer;
+            z-index: 40;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="titleOverlay">EchoScript</div>
+    <div id="clickText">Click to Caption</div>
+    <div id="clickArea"></div>
+
+    <script type="module" src="https://unpkg.com/@splinetool/viewer@1.12.5/build/spline-viewer.js"></script>
+
+    <spline-viewer id="scene"
+        url="https://prod.spline.design/f2kYMKfuAxdYP5GH/scene.splinecode">
+    </spline-viewer>
+
+<script>
+const title = document.getElementById("titleOverlay");
+const clickText = document.getElementById("clickText");
+const clickArea = document.getElementById("clickArea");
+const scene = document.getElementById("scene");
+
+function updateScrollState() {
+    const scrollY = window.scrollY;
+    const maxScroll = document.body.scrollHeight - window.innerHeight;
+    const progress = maxScroll > 0 ? scrollY / maxScroll : 0;
+
+    // Title strictly controlled by scroll position
+    title.style.opacity = (progress < 0.12) ? "1" : "0";
+
+    // Show click-to-caption near bottom
+    if (progress > 0.65) {
+        clickText.style.opacity = "1";
+        clickArea.style.pointerEvents = "auto";
+    } else {
+        clickText.style.opacity = "0";
+        clickArea.style.pointerEvents = "none";
+    }
+}
+
+function fullResetAfterLayout() {
+    window.scrollTo(0, 0);
+
+    clickText.textContent = "Click to Caption";
+    clickText.style.opacity = "0";
+    clickArea.style.pointerEvents = "none";
+
+    // Crucial: recalc after the browser finishes placing content
+    setTimeout(updateScrollState, 150);
+}
+
+// First load
+window.addEventListener("load", () => {
+    fullResetAfterLayout();
+});
+
+// Back navigation (bfcache)
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted || performance.getEntriesByType("navigation")[0].type === "back_forward") {
+        fullResetAfterLayout();
+    }
+});
+
+window.addEventListener("scroll", updateScrollState);
+
+clickArea.addEventListener("click", () => {
+    clickText.textContent = "Loading...";
+    window.location.href = "{{ url_for('index_page') }}";
+});
+</script>
+
+
+
+</body>
+</html>

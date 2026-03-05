@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EchoScript</title>
+
+<script type="module" src="https://unpkg.com/@splinetool/viewer@1.12.3/build/spline-viewer.js"></script>
+
+<style>
+:root{
+  --purple: #b359ff;
+  --purple-glow: #d28aff;
+  --bg: #0a0714;
+}
+
+html, body { background: var(--bg); margin:0; overflow:hidden; }
+
+/* Loader */
+#loader{
+  position:fixed; inset:0;
+  background:#0a0714;
+  display:flex; justify-content:center; align-items:center; flex-direction:column;
+  z-index:9999; color:white; font-size:20px;
+  transition:opacity .8s ease;
+}
+.spinner{
+  width:55px;height:55px;
+  border:5px solid rgba(255,255,255,0.2);
+  border-top-color:#b359ff;
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+  margin-bottom:12px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Spline */
+.spline-bg{ position:fixed; inset:0; width:100vw;height:100vh; z-index:-10; }
+#spline{ position:absolute; inset:0; width:100vw;height:100vh; pointer-events:none; z-index:30; }
+
+/* Mic */
+#micBtn{
+  position:absolute; left:48%; top:88%;
+  transform:translate(-50%,-50%);
+  height:90px; cursor:pointer;
+  z-index:60;
+  filter:drop-shadow(0 0 18px var(--purple));
+  transition:.18s;
+}
+#micBtn:hover{ transform:translate(-50%,-50%) scale(1.08); }
+
+#micLabel{
+  position:absolute; left:49.5%; top:93%;
+  transform:translateX(-50%);
+  font-size:18px; color:white;
+  text-shadow:0 0 10px white;
+  z-index:70;
+}
+
+/* Caption & Reason Boxes */
+.box{
+  width:290px; padding:20px;
+  background:rgba(10,7,20,0.75);
+  border-radius:16px; color:white;
+  opacity:0; transition:opacity .6s;
+  pointer-events:none;
+  border:2px solid var(--purple);
+  backdrop-filter:blur(7px);
+}
+@keyframes glowPulse{
+  0%{box-shadow:0 0 10px var(--purple);}
+  50%{box-shadow:0 0 26px var(--purple-glow);}
+  100%{box-shadow:0 0 10px var(--purple);}
+}
+.glow{ animation:glowPulse 2.5s infinite ease-in-out }
+
+#fileBox{ position:absolute; left:3%; top:50%; transform:translateY(-50%); z-index:70; }
+#reasonBox{ position:absolute; right:3%; top:50%; transform:translateY(-50%); z-index:70; }
+
+#brandTitle {
+  position: absolute;
+  cursor: pointer;
+  top: 7%;
+  left: 11%;
+  transform: translateX(-50%);
+  font-size: 3.8rem;
+  font-weight: 800;
+  font-family: 'Cinzel', serif;
+  z-index: 120;
+
+  pointer-events: auto; /* ENABLE CLICK */
+
+  background: linear-gradient(to bottom, #ffffff 0%, #cfc4ff 30%, #7d58df 60%, #3f1f6d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0px 0px 12px rgba(150, 110, 255, 0.25));
+
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+#brandTitle:hover {
+  transform: translateX(-50%) scale(1.05);
+  filter: drop-shadow(0px 0px 18px rgba(150, 110, 255, 0.4));
+}
+
+#audioInput{display:none}
+</style>
+</head>
+
+<body>
+
+<div id="loader"><div class="spinner"></div>Loading...</div>
+<div id="brandTitle">EchoScript</div>
+
+<div class="spline-bg">
+<spline-viewer url="https://prod.spline.design/qmi9-jzr0WRYijDv/scene.splinecode"></spline-viewer>
+</div>
+
+<spline-viewer id="spline"
+url="https://prod.spline.design/646FGLTcoEhYsxkZ/scene.splinecode"></spline-viewer>
+
+<img id="micBtn" src="{{ url_for('static', filename='mike.png') }}" alt="mic">
+<p id="micLabel">Click the mic</p>
+<audio id="audioPlayer" style="display:none;"></audio>
+<input id="audioInput" type="file" accept="audio/*">
+
+<div id="fileBox" class="box"></div>
+<div id="reasonBox" class="box"></div>
+
+<script>
+const spline = document.getElementById("spline");
+const micBtn = document.getElementById("micBtn");
+const audioInput = document.getElementById("audioInput");
+const fileBox = document.getElementById("fileBox");
+const reasonBox = document.getElementById("reasonBox");
+const loader = document.getElementById("loader");
+const audioPlayer = document.getElementById("audioPlayer");
+
+// Go back to landing page when clicking EchoScript
+document.getElementById("brandTitle").addEventListener("click", () => {
+  document.body.style.opacity = "0";
+  setTimeout(() => {
+    window.location.href = "/"; 
+  }, 400);
+});
+
+let ctx, analyser, dataArray, raf;
+const baseY = -15;
+spline.style.transform = `translateY(${baseY}px)`;
+
+function checkBackend(){
+  fetch("/ready")
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.ready) hideLoader();
+      else setTimeout(checkBackend,300);
+    });
+}
+checkBackend();
+setTimeout(()=>hideLoader(),10000);
+
+function hideLoader(){
+  loader.style.opacity="0";
+  setTimeout(()=>loader.style.display="none",900);
+}
+
+// Upload caption + reasoning
+function upload(file){
+  const fd=new FormData();
+  fd.append("file",file);
+
+  fetch("/upload",{method:"POST",body:fd})
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.error){
+      fileBox.innerHTML = d.error;
+      reasonBox.innerHTML = "Reasoning unavailable.";
+    } else {
+      fileBox.innerHTML = d.caption;
+      let reasonHTML = "<strong>Reasoning:</strong><br>";
+      d.reasoning.forEach(r=>{
+        reasonHTML += `Rank ${r.rank}: "${r.caption}" (score: ${r.score.toFixed(3)})<br>`;
+      });
+      reasonBox.innerHTML = reasonHTML;
+    }
+
+    fileBox.style.opacity=1;
+    reasonBox.style.opacity=1;
+    fileBox.classList.add("glow");
+    reasonBox.classList.add("glow");
+  });
+}
+
+// Audio-reactive Spline animation
+function animateAudio(file){
+  const rd=new FileReader();
+  rd.onload=e=>{
+    ctx=new AudioContext();
+    analyser=ctx.createAnalyser();
+    analyser.fftSize=256;
+    dataArray=new Uint8Array(analyser.frequencyBinCount);
+    ctx.decodeAudioData(e.target.result).then(buf=>{
+      const src=ctx.createBufferSource();
+      src.buffer=buf;
+      src.connect(analyser);
+      src.start();
+      react();
+    });
+  };
+  rd.readAsArrayBuffer(file);
+}
+
+function react(){
+  raf=requestAnimationFrame(react);
+  analyser.getByteFrequencyData(dataArray);
+  const v=dataArray.reduce((a,b)=>a+b)/dataArray.length;
+  const scale = 1 + Math.min(v/200,0.35);
+  spline.style.transform=`translateY(${baseY}px) scale(${scale})`;
+}
+
+// STOP animation only after audio ends 🟢
+audioPlayer.onended = () => {
+  cancelAnimationFrame(raf);
+  spline.style.transform = `translateY(${baseY}px) scale(1)`;
+};
+
+// When file selected
+audioInput.onchange = () => {
+  if (!audioInput.files.length) return;
+
+  const file = audioInput.files[0];
+
+  // Play uploaded audio once
+  audioPlayer.src = URL.createObjectURL(file);
+  audioPlayer.play().catch(err => console.log("Auto-play blocked:", err));
+
+  fileBox.style.opacity = 0;
+  reasonBox.style.opacity = 0;
+  fileBox.textContent = "Processing...";
+  reasonBox.textContent = "";
+
+  animateAudio(file);
+  upload(file);
+};
+
+micBtn.onclick = ()=>audioInput.click();
+</script>
+
+
+</body>
+</html>
